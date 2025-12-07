@@ -1,4 +1,7 @@
 {
+  "key.categories.intent": "Intent",
+  "key.intent.debug": "Toggle Debug Overlay",
+  "key.intent.editor": "Open Editor Screen",
   "intent.gui.label.edit_rule": "Edit Rule",
   "intent.gui.label.action_id.button": "Action ID (e.g. key.attack)",
   "intent.gui.label.action_id": "Action ID",

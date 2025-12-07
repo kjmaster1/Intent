@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
+import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -29,43 +30,77 @@ public class IntentEditorScreen extends Screen {
 
     @Override
     protected void init() {
-        // 1. Left Pane (Keys)
-        this.bindingList = new BindingList(this.minecraft, 150, this.height - 80, 30, 24);
-        this.bindingList.setX(10);
+        // --- 1. Left Pane (Keys) ---
+        int leftPaneX = 10;
+        int leftPaneWidth = 150;
+
+        this.bindingList = new BindingList(this.minecraft, leftPaneWidth, this.height - 80, 30, 24);
+        this.bindingList.setX(leftPaneX);
         this.addRenderableWidget(bindingList);
 
-        // 1b. Left Pane Buttons (Add/Remove Key)
-        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.add_key_symbol"), b -> openAddKeyPopup())
-                .bounds(10, this.height - 75, 70, 20).build());
-        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.remove_key_symbol"), b -> removeSelectedKey())
-                .bounds(85, this.height - 75, 70, 20).build());
+        // Use a LinearLayout to group and space the buttons automatically
+        LinearLayout leftBtnLayout = LinearLayout.horizontal().spacing(5);
+        leftBtnLayout.addChild(Button.builder(Component.translatable("intent.editor.button.add_key_symbol"), b -> openAddKeyPopup())
+                .width(70).build());
+        leftBtnLayout.addChild(Button.builder(Component.translatable("intent.editor.button.remove_key_symbol"), b -> removeSelectedKey())
+                .width(70).build());
+
+        // Calculate layout size
+        leftBtnLayout.arrangeElements();
+
+        // Center the layout horizontally within the Left Pane area
+        int leftPaneCenter = leftPaneX + (leftPaneWidth / 2);
+        leftBtnLayout.setPosition(leftPaneCenter - (leftBtnLayout.getWidth() / 2), this.height - 75);
+
+        // Register widgets
+        leftBtnLayout.visitWidgets(this::addRenderableWidget);
 
 
-        // 2. Right Pane (Rules)
-        int leftStart = 170;
-        int ruleListWidth = this.width - leftStart - 10;
-        this.ruleList = new RuleList(this.minecraft, ruleListWidth, this.height - 80, 30, 36);
-        this.ruleList.setX(leftStart);
+        // --- 2. Right Pane (Rules) ---
+        int rightPaneX = 170;
+        int rightPaneWidth = this.width - rightPaneX - 10;
+
+        this.ruleList = new RuleList(this.minecraft, rightPaneWidth, this.height - 80, 30, 36);
+        this.ruleList.setX(rightPaneX);
         this.addRenderableWidget(ruleList);
 
-        // 2b. Right Pane Buttons (Add/Remove Rule)
-        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.add_rule"), b -> openAddRuleScreen())
-                .bounds(leftStart, this.height - 75, 100, 20).build());
-        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.remove_rule"), b -> removeSelectedRule())
-                .bounds(leftStart + 110, this.height - 75, 100, 20).build());
+        // Use a LinearLayout for the Rule buttons
+        LinearLayout rightBtnLayout = LinearLayout.horizontal().spacing(10);
+        rightBtnLayout.addChild(Button.builder(Component.translatable("intent.editor.button.add_rule"), b -> openAddRuleScreen())
+                .width(100).build());
+        rightBtnLayout.addChild(Button.builder(Component.translatable("intent.editor.button.remove_rule"), b -> removeSelectedRule())
+                .width(100).build());
+
+        rightBtnLayout.arrangeElements();
+
+        // Center the layout horizontally within the Right Pane area
+        int rightPaneCenter = rightPaneX + (rightPaneWidth / 2);
+        rightBtnLayout.setPosition(rightPaneCenter - (rightBtnLayout.getWidth() / 2), this.height - 75);
+
+        rightBtnLayout.visitWidgets(this::addRenderableWidget);
 
 
         refreshLeftList();
 
-        // 3. Footer Buttons
-        int center = this.width / 2;
-        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.save"), button -> {
+
+        // --- 3. Footer Buttons ---
+        // Use a LinearLayout for the bottom Save/Done buttons
+        LinearLayout footerLayout = LinearLayout.horizontal().spacing(10);
+
+        footerLayout.addChild(Button.builder(Component.translatable("intent.editor.button.save"), button -> {
             Intent.DATA_MANAGER.saveToDisk();
             this.onClose();
-        }).bounds(center - 105, this.height - 25, 100, 20).build());
+        }).width(100).build());
 
-        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.done"), button -> this.onClose())
-                .bounds(center + 5, this.height - 25, 100, 20).build());
+        footerLayout.addChild(Button.builder(Component.translatable("intent.editor.button.done"), button -> this.onClose())
+                .width(100).build());
+
+        footerLayout.arrangeElements();
+
+        // Center on the entire screen
+        footerLayout.setPosition((this.width - footerLayout.getWidth()) / 2, this.height - 25);
+
+        footerLayout.visitWidgets(this::addRenderableWidget);
     }
 
     // --- Actions ---

@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Comparator;
+import java.util.List;
 
 public class IntentOverlay implements LayeredDraw.Layer {
 
@@ -35,13 +36,14 @@ public class IntentOverlay implements LayeredDraw.Layer {
         IntentProfile profile = Intent.DATA_MANAGER.getMasterProfile();
 
         for (IntentProfile.Binding binding : profile.bindings()) {
-            var activeMatch = binding.stack().stream()
+            // Get ALL active matches, sorted by priority (Highest First).
+            // This ensures "shadowed" rules are still visible in the HUD.
+            List<IntentProfile.IntentEntry> activeMatches = binding.stack().stream()
                     .filter(entry -> entry.context().test(player))
-                    .max(Comparator.comparingInt(IntentProfile.IntentEntry::priority));
+                    .sorted(Comparator.comparingInt(IntentProfile.IntentEntry::priority).reversed())
+                    .toList();
 
-            if (activeMatch.isPresent()) {
-                IntentProfile.IntentEntry entry = activeMatch.get();
-
+            for (IntentProfile.IntentEntry entry : activeMatches) {
                 String keyName = InputConstants.getKey(binding.triggerKey()).getDisplayName().getString();
 
                 // Safely get the action name (handles missing mappings)
@@ -61,8 +63,8 @@ public class IntentOverlay implements LayeredDraw.Layer {
 
                 int width = mc.font.width(text);
 
-                // Draw with shadow
-                graphics.drawString(mc.font, text, x - width, y, 0xFFFFFF, true);
+                // Draw with shadow using Opaque White
+                graphics.drawString(mc.font, text, x - width, y, 0xFFFFFFFF, true);
 
                 // Stack upwards
                 y -= 12;
