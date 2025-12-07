@@ -3,6 +3,7 @@ package com.kjmaster.intent.client.gui.editor;
 import com.kjmaster.intent.Intent;
 import com.kjmaster.intent.data.IntentProfile;
 import com.kjmaster.intent.registry.IntentRegistries;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -29,20 +30,34 @@ public class IntentEditorScreen extends Screen {
     @Override
     protected void init() {
         // 1. Left Pane (Keys)
-        this.bindingList = new BindingList(this.minecraft, 150, this.height - 60, 30, 24);
+        this.bindingList = new BindingList(this.minecraft, 150, this.height - 80, 30, 24);
         this.bindingList.setX(10);
         this.addRenderableWidget(bindingList);
+
+        // 1b. Left Pane Buttons (Add/Remove Key)
+        this.addRenderableWidget(Button.builder(Component.literal("+"), b -> openAddKeyPopup())
+                .bounds(10, this.height - 75, 70, 20).build());
+        this.addRenderableWidget(Button.builder(Component.literal("-"), b -> removeSelectedKey())
+                .bounds(85, this.height - 75, 70, 20).build());
+
 
         // 2. Right Pane (Rules)
         int leftStart = 170;
         int ruleListWidth = this.width - leftStart - 10;
-        this.ruleList = new RuleList(this.minecraft, ruleListWidth, this.height - 60, 30, 36);
+        this.ruleList = new RuleList(this.minecraft, ruleListWidth, this.height - 80, 30, 36);
         this.ruleList.setX(leftStart);
         this.addRenderableWidget(ruleList);
 
+        // 2b. Right Pane Buttons (Add/Remove Rule)
+        this.addRenderableWidget(Button.builder(Component.literal("Add Rule"), b -> openAddRuleScreen())
+                .bounds(leftStart, this.height - 75, 100, 20).build());
+        this.addRenderableWidget(Button.builder(Component.literal("Remove Rule"), b -> removeSelectedRule())
+                .bounds(leftStart + 110, this.height - 75, 100, 20).build());
+
+
         refreshLeftList();
 
-        // 3. Buttons
+        // 3. Footer Buttons
         int center = this.width / 2;
         this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
             Intent.DATA_MANAGER.saveToDisk();
@@ -53,12 +68,44 @@ public class IntentEditorScreen extends Screen {
                 .bounds(center + 5, this.height - 25, 100, 20).build());
     }
 
+    // --- Actions ---
+
+    private void openAddKeyPopup() {
+        this.minecraft.setScreen(new AddKeyScreen(this));
+    }
+
+    private void removeSelectedKey() {
+        if (selectedBinding != null) {
+            Intent.DATA_MANAGER.removeBinding(selectedBinding.triggerKey());
+            this.selectedBinding = null;
+            refreshLeftList();
+        }
+    }
+
+    private void openAddRuleScreen() {
+        if (selectedBinding == null) return;
+        this.minecraft.setScreen(new EditRuleScreen(this, null, newEntry -> {
+            List<IntentProfile.IntentEntry> stack = new ArrayList<>(selectedBinding.stack());
+            stack.add(newEntry);
+            updateBindingInManager(selectedBinding, new IntentProfile.Binding(selectedBinding.triggerKey(), stack));
+        }));
+    }
+
+    private void removeSelectedRule() {
+        RuleEntry selected = ruleList.getSelected();
+        if (selected != null && selectedBinding != null) {
+            List<IntentProfile.IntentEntry> stack = new ArrayList<>(selectedBinding.stack());
+            stack.remove(selected.entry);
+            updateBindingInManager(selectedBinding, new IntentProfile.Binding(selectedBinding.triggerKey(), stack));
+        }
+    }
+
+    // --- Refresh Logic ---
+
     private void refreshLeftList() {
         String selectedKey = (selectedBinding != null) ? selectedBinding.triggerKey() : null;
 
         bindingList.clearEntries();
-
-        // CHANGED: iterate only the Master Profile
         IntentProfile master = Intent.DATA_MANAGER.getMasterProfile();
 
         for (IntentProfile.Binding binding : master.bindings()) {
@@ -71,9 +118,7 @@ public class IntentEditorScreen extends Screen {
             }
         }
 
-        if (selectedBinding != null) {
-            ruleList.refreshRules(selectedBinding);
-        }
+        ruleList.refreshRules(selectedBinding);
     }
 
     public void selectBinding(IntentProfile.Binding binding) {
@@ -81,7 +126,6 @@ public class IntentEditorScreen extends Screen {
         this.ruleList.refreshRules(binding);
     }
 
-    // Simplified update logic using the Data Manager's helper
     public void updateBindingInManager(IntentProfile.Binding oldBinding, IntentProfile.Binding newBinding) {
         Intent.DATA_MANAGER.updateBinding(newBinding);
         this.selectedBinding = newBinding;
@@ -114,27 +158,90 @@ public class IntentEditorScreen extends Screen {
         int left = 170;
         int right = this.width - 10;
         int top = 30;
-        int bottom = this.height - 35;
+        int bottom = this.height - 50;
         graphics.fill(left, top, right, bottom, 0x80000000);
 
         if (selectedBinding == null) {
             graphics.drawCenteredString(this.font, "Select a Key to Edit", left + (right - left) / 2, top + 50, 0xAAAAAA);
         } else {
-            graphics.drawString(this.font, "Use UP/DOWN to change priority", left + 5, bottom + 5, 0xAAAAAA, false);
+            graphics.drawCenteredString(this.font, "Use UP/DOWN to change priority", this.width / 2, bottom + 5, 0xAAAAAA);
         }
     }
 
     // ============================
-    // LEFT PANE
+    // INNER CLASS: ADD KEY SCREEN
+    // ============================
+    private static class AddKeyScreen extends Screen {
+        private final Screen parent;
+        private final Component message = Component.literal("Press a Key to Bind...");
+
+        public AddKeyScreen(Screen parent) {
+            super(Component.literal("Add Key"));
+            this.parent = parent;
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                this.onClose();
+                return true;
+            }
+            InputConstants.Key key = InputConstants.getKey(keyCode, scanCode);
+            finish(key);
+            return true;
+        }
+
+        @Override
+        public boolean mouseClicked(double mouseX, double mouseY, int button) {
+            InputConstants.Key key = InputConstants.Type.MOUSE.getOrCreate(button);
+            finish(key);
+            return true;
+        }
+
+        private void finish(InputConstants.Key key) {
+            IntentProfile.Binding newBinding = new IntentProfile.Binding(key.getName(), new ArrayList<>());
+            Intent.DATA_MANAGER.updateBinding(newBinding);
+            this.onClose();
+        }
+
+        @Override
+        public void onClose() {
+            this.minecraft.setScreen(parent);
+        }
+
+        @Override
+        public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            this.renderBackground(graphics, mouseX, mouseY, partialTick);
+            graphics.drawCenteredString(this.font, message, this.width / 2, this.height / 2, 0xFFFFFF);
+        }
+    }
+
+    // ============================
+    // LEFT PANE (BINDINGS)
     // ============================
     public class BindingList extends ObjectSelectionList<BindingEntry> {
         public BindingList(Minecraft mc, int width, int height, int y, int itemHeight) {
             super(mc, width, height, y, itemHeight);
         }
-        @Override public int getRowWidth() { return 130; }
-        @Override protected int getScrollbarPosition() { return this.getX() + this.width - 6; }
-        public void clearEntries() { super.clearEntries(); }
-        @Override public int addEntry(@NotNull BindingEntry entry) { return super.addEntry(entry); }
+
+        @Override
+        public int getRowWidth() {
+            return 130;
+        }
+
+        @Override
+        protected int getScrollbarPosition() {
+            return this.getX() + this.width - 6;
+        }
+
+        public void clearEntries() {
+            super.clearEntries();
+        }
+
+        @Override
+        public int addEntry(@NotNull BindingEntry entry) {
+            return super.addEntry(entry);
+        }
     }
 
     public class BindingEntry extends ObjectSelectionList.Entry<BindingEntry> {
@@ -165,27 +272,37 @@ public class IntentEditorScreen extends Screen {
         }
 
         @Override
-        public @NotNull Component getNarration() { return Component.literal(formattedName); }
+        public @NotNull Component getNarration() {
+            return Component.literal(formattedName);
+        }
     }
 
 
     // ============================
-    // RIGHT PANE
+    // RIGHT PANE (RULES)
     // ============================
     public class RuleList extends ObjectSelectionList<RuleEntry> {
         public RuleList(Minecraft mc, int width, int height, int y, int itemHeight) {
             super(mc, width, height, y, itemHeight);
         }
-        @Override public int getRowWidth() { return this.width - 20; }
-        @Override protected int getScrollbarPosition() { return this.getX() + this.width - 6; }
-        @Override protected void renderSelection(@NotNull GuiGraphics graphics, int top, int width, int height, int outerColor, int innerColor) {}
 
-        public void scrollTo(RuleEntry entry) {
-            this.centerScrollOn(entry);
+        @Override
+        public int getRowWidth() {
+            return this.width - 20;
+        }
+
+        @Override
+        protected int getScrollbarPosition() {
+            return this.getX() + this.width - 6;
+        }
+
+        @Override
+        protected void renderSelection(@NotNull GuiGraphics graphics, int top, int width, int height, int outerColor, int innerColor) {
         }
 
         public void refreshRules(IntentProfile.Binding binding) {
             super.clearEntries();
+            if (binding == null) return;
             var sorted = binding.stack().stream()
                     .sorted((a, b) -> Integer.compare(b.priority(), a.priority()))
                     .toList();
@@ -196,7 +313,7 @@ public class IntentEditorScreen extends Screen {
     }
 
     public class RuleEntry extends ObjectSelectionList.Entry<RuleEntry> {
-        private final IntentProfile.IntentEntry entry;
+        public final IntentProfile.IntentEntry entry;
         private final String actionName;
         private final String contextName;
 
@@ -238,17 +355,7 @@ public class IntentEditorScreen extends Screen {
             mutableStack.add(newEntry);
 
             IntentProfile.Binding newBinding = new IntentProfile.Binding(selectedBinding.triggerKey(), mutableStack);
-
-            // Update via Manager (which handles Master Profile)
             updateBindingInManager(selectedBinding, newBinding);
-
-            for (RuleEntry re : ruleList.children()) {
-                if (re.entry.equals(newEntry)) {
-                    ruleList.setSelected(re);
-                    ruleList.scrollTo(re);
-                    break;
-                }
-            }
         }
 
         @Override
@@ -258,6 +365,8 @@ public class IntentEditorScreen extends Screen {
         }
 
         @Override
-        public @NotNull Component getNarration() { return Component.literal(actionName); }
+        public @NotNull Component getNarration() {
+            return Component.literal(actionName);
+        }
     }
 }

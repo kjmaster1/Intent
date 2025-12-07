@@ -10,6 +10,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
@@ -25,6 +26,8 @@ public class Intent {
     public static final IntentDataManager DATA_MANAGER = new IntentDataManager();
 
     public Intent(ModContainer container, IEventBus modEventBus) {
+        container.registerConfig(ModConfig.Type.CLIENT, Config.SPEC);
+
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
 
         IntentRegistries.register(modEventBus);

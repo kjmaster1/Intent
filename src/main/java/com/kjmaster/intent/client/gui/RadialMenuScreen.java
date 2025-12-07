@@ -1,5 +1,6 @@
 package com.kjmaster.intent.client.gui;
 
+import com.kjmaster.intent.Config;
 import com.kjmaster.intent.client.InputHandler;
 import com.kjmaster.intent.data.IntentProfile;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -57,6 +58,13 @@ public class RadialMenuScreen extends Screen {
         int centerY = this.height / 2;
         int count = options.size();
 
+        // SCALING: Calculate dynamic radius based on screen size AND Config
+        double baseScale = Math.min(this.width, this.height) * 0.35;
+        double userScale = Config.RADIAL_MENU_SCALE.get();
+
+        double radiusMax = baseScale * userScale;
+        double radiusMin = radiusMax * 0.4;
+
         // --- 1. Draw the Wheel (The Donut) ---
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
@@ -67,8 +75,6 @@ public class RadialMenuScreen extends Screen {
         Matrix4f matrix = graphics.pose().last().pose();
 
         double sectorSize = 360.0 / count;
-        double radiusMin = 30;
-        double radiusMax = 80;
 
         // Calculate Selection
         double dx = mouseX - centerX;
@@ -137,13 +143,27 @@ public class RadialMenuScreen extends Screen {
             int ty = centerY + (int) (Math.sin(rad) * textDist);
 
             String name = simplifyName(options.get(i).actionId());
-            int width = font.width(name);
+            int textWidth = font.width(name);
 
-            // Draw text centered
-            graphics.drawString(font, name, tx - width / 2, ty - 4, 0xFFFFFFFF, true);
+            // TEXT SCALING
+            double arcLength = (2 * Math.PI * textDist) * (sectorSize / 360.0);
+            double maxTextWidth = arcLength * 0.85;
+
+            float scale = 1.0f;
+            if (textWidth > maxTextWidth) {
+                scale = (float) (maxTextWidth / textWidth);
+            }
+
+            graphics.pose().pushPose();
+            graphics.pose().translate(tx, ty, 0);
+            graphics.pose().scale(scale, scale, 1.0f);
+
+            graphics.drawString(font, name, -textWidth / 2, -4, 0xFFFFFFFF, true);
+
+            graphics.pose().popPose();
         }
 
-        // --- 3. Draw Selected Action (At Top of Screen) ---
+        // --- 3. Draw Selected Action ---
         if (selectedIndex != -1) {
             String fullName = options.get(selectedIndex).actionId();
             graphics.drawCenteredString(font, "Selected: " + fullName, centerX, centerY - (int) radiusMax - 20, 0xFF55FF55);

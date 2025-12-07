@@ -1,5 +1,6 @@
 package com.kjmaster.intent.client;
 
+import com.kjmaster.intent.Config;
 import com.kjmaster.intent.Intent;
 import com.kjmaster.intent.client.gui.RadialMenuScreen;
 import com.kjmaster.intent.client.gui.editor.IntentEditorScreen;
@@ -14,6 +15,7 @@ import net.minecraft.world.InteractionHand;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import org.lwjgl.glfw.GLFW;
@@ -34,7 +36,6 @@ public class InputHandler {
         }
     }
 
-    // A list of actions waiting to fire (e.g., "Attack in 2 ticks")
     private static final List<DelayedTask> taskQueue = new ArrayList<>();
 
     // Standard Redirects (Holding Jump/Mine)
@@ -50,8 +51,32 @@ public class InputHandler {
 
     private static final Map<InputConstants.Key, RedirectState> activeRedirects = new HashMap<>();
 
+    // "Hold to Open" State
+    private static final Map<InputConstants.Key, Integer> holdingKeys = new HashMap<>();
+
 
     // --- EVENTS ---
+
+    @SubscribeEvent
+    public static void onLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
+        resetAllState();
+    }
+
+    private static void resetAllState() {
+        if (!taskQueue.isEmpty()) {
+            Intent.LOGGER.debug("InputHandler: Clearing {} pending tasks due to state reset.", taskQueue.size());
+            taskQueue.clear();
+        }
+
+        if (!activeRedirects.isEmpty()) {
+            Intent.LOGGER.debug("InputHandler: Releasing {} active key redirects.", activeRedirects.size());
+            for (RedirectState state : activeRedirects.values()) {
+                state.target.setDown(false);
+            }
+            activeRedirects.clear();
+        }
+        holdingKeys.clear();
+    }
 
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
@@ -59,8 +84,26 @@ public class InputHandler {
         if (mc.player == null) return;
         InputConstants.Key physicalKey = InputConstants.getKey(event.getKey(), event.getScanCode());
 
-        if (event.getAction() == GLFW.GLFW_RELEASE) return;
+        // RELEASE EVENT
+        if (event.getAction() == GLFW.GLFW_RELEASE) {
+            // If we were holding this key waiting for a menu, but released early -> TAP ACTION
+            if (holdingKeys.containsKey(physicalKey)) {
+                holdingKeys.remove(physicalKey);
 
+                // Execute "Tap" behavior (Highest Priority Match)
+                List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(physicalKey);
+                for (IntentProfile.Binding binding : bindings) {
+                    List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
+                    if (!matches.isEmpty()) {
+                        performAction(matches.getFirst(), physicalKey, 0);
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+
+        // PRESS EVENT
         if (event.getAction() == GLFW.GLFW_PRESS) {
 
             if (KeyInit.OPEN_EDITOR.get().matches(event.getKey(), event.getScanCode())) {
@@ -68,18 +111,34 @@ public class InputHandler {
                 return;
             }
 
+            if (KeyInit.TOGGLE_DEBUG.get().matches(event.getKey(), event.getScanCode())) {
+                Config.DEBUG_MODE.set(!Config.DEBUG_MODE.get());
+                return;
+            }
+
             if (activeRedirects.containsKey(physicalKey)) return;
             if (mc.screen instanceof RadialMenuScreen) return;
 
-            IntentProfile profile = Intent.DATA_MANAGER.getMasterProfile();
+            // Binding Logic
+            List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(physicalKey);
+            for (IntentProfile.Binding binding : bindings) {
+                List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
+                if (matches.isEmpty()) continue;
 
-            for (IntentProfile.Binding binding : profile.bindings()) {
-                if (binding.getInput().equals(physicalKey)) {
-                    List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
+                // 1. Single Match -> Always Instant
+                if (matches.size() == 1) {
+                    performAction(matches.getFirst(), physicalKey, 0);
+                    return;
+                }
 
-                    if (matches.isEmpty()) continue;
-                    else if (matches.size() == 1) performAction(matches.getFirst(), physicalKey, 0);
-                    else mc.setScreen(new RadialMenuScreen(matches, physicalKey));
+                // 2. Multiple Matches -> Radial Menu
+                int delay = Config.RADIAL_MENU_DELAY.get();
+                if (delay <= 0) {
+                    // Instant Open
+                    mc.setScreen(new RadialMenuScreen(matches, physicalKey));
+                } else {
+                    // Delayed Open (Wait for Tick)
+                    holdingKeys.put(physicalKey, delay);
                 }
             }
         }
@@ -90,41 +149,54 @@ public class InputHandler {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
-        // Convert Mouse ID to unified InputConstants.Key
-        // Mouse codes: 0=Left, 1=Right, 2=Middle, 3+=Side Buttons
         InputConstants.Key mouseKey = InputConstants.Type.MOUSE.getOrCreate(event.getButton());
 
-        // Ignore Release (handled by tick)
-        if (event.getAction() == GLFW.GLFW_RELEASE) return;
+        // RELEASE EVENT
+        if (event.getAction() == GLFW.GLFW_RELEASE) {
+            // TAP BEHAVIOR: If we were holding this button waiting for a menu, but released early
+            if (holdingKeys.containsKey(mouseKey)) {
+                holdingKeys.remove(mouseKey);
 
-        if (event.getAction() == GLFW.GLFW_PRESS) {
-
-            // Safety: If Left/Right click is NOT bound in our system, do NOT touch it.
-            // We only intervene if the user explicitly created a profile for "key.mouse.0" etc.
-            boolean isBound = false;
-            for (IntentProfile profile : Intent.DATA_MANAGER.getProfiles().values()) {
-                for (IntentProfile.Binding binding : profile.bindings()) {
-                    if (binding.getInput().equals(mouseKey)) {
-                        isBound = true;
+                // Execute "Tap" behavior (Highest Priority Match)
+                List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(mouseKey);
+                for (IntentProfile.Binding binding : bindings) {
+                    List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
+                    if (!matches.isEmpty()) {
+                        performAction(matches.getFirst(), mouseKey, 0);
                         break;
                     }
                 }
             }
-            if (!isBound) return; // Let vanilla handle normal clicks
+            return;
+        }
 
-            // If we are here, the user wants to override this mouse button.
+        // PRESS EVENT
+        if (event.getAction() == GLFW.GLFW_PRESS) {
+
+            // Safety: If this mouse button isn't bound in Intent, let Vanilla handle it.
+            // This prevents us from breaking standard left/right clicks unless configured.
+            List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(mouseKey);
+            if (bindings.isEmpty()) return;
+
             if (activeRedirects.containsKey(mouseKey)) return;
             if (mc.screen instanceof RadialMenuScreen) return;
 
-            for (IntentProfile profile : Intent.DATA_MANAGER.getProfiles().values()) {
-                for (IntentProfile.Binding binding : profile.bindings()) {
-                    if (binding.getInput().equals(mouseKey)) {
-                        List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
+            for (IntentProfile.Binding binding : bindings) {
+                List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
+                if (matches.isEmpty()) continue;
 
-                        if (matches.isEmpty()) continue;
-                        else if (matches.size() == 1) performAction(matches.get(0), mouseKey, 0);
-                        else mc.setScreen(new RadialMenuScreen(matches, mouseKey));
-                    }
+                // 1. Single Match -> Always Instant
+                if (matches.size() == 1) {
+                    performAction(matches.getFirst(), mouseKey, 0);
+                    return;
+                }
+
+                // 2. Multiple Matches -> Radial Menu logic
+                int delay = Config.RADIAL_MENU_DELAY.get();
+                if (delay <= 0) {
+                    mc.setScreen(new RadialMenuScreen(matches, mouseKey));
+                } else {
+                    holdingKeys.put(mouseKey, delay);
                 }
             }
         }
@@ -133,23 +205,60 @@ public class InputHandler {
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Pre event) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
 
-        // 1. PROCESS TASK QUEUE (Attacks/Clicks)
+        if (mc.player == null) {
+            resetAllState();
+            return;
+        }
+
+        if (mc.screen != null && !(mc.screen instanceof RadialMenuScreen)) {
+            resetAllState();
+            return;
+        }
+
+        // NEW: Check Holding Keys
+        if (!holdingKeys.isEmpty()) {
+            Iterator<Map.Entry<InputConstants.Key, Integer>> it = holdingKeys.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<InputConstants.Key, Integer> entry = it.next();
+                int ticksLeft = entry.getValue() - 1;
+
+                if (ticksLeft <= 0) {
+                    // Time is up! Open the menu.
+                    InputConstants.Key key = entry.getKey();
+                    it.remove(); // Remove from holding so Release doesn't trigger Tap
+
+                    List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(key);
+                    for (IntentProfile.Binding binding : bindings) {
+                        List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
+                        if (matches.size() > 1) {
+                            mc.setScreen(new RadialMenuScreen(matches, key));
+                            break;
+                        } else if (!matches.isEmpty()) {
+                            // State changed, only 1 match now? Execute it.
+                            performAction(matches.getFirst(), key, 0);
+                        }
+                    }
+                } else {
+                    entry.setValue(ticksLeft);
+                }
+            }
+        }
+
+        // 1. PROCESS TASK QUEUE
         if (!taskQueue.isEmpty()) {
             Iterator<DelayedTask> it = taskQueue.iterator();
             while (it.hasNext()) {
                 DelayedTask task = it.next();
                 task.ticksWait--;
                 if (task.ticksWait <= 0) {
-                    // Time's up! Run the action.
                     task.action.run();
                     it.remove();
                 }
             }
         }
 
-        // 2. PROCESS HELD KEYS (Jump/Mine)
+        // 2. PROCESS HELD KEYS
         long window = mc.getWindow().getWindow();
         List<InputConstants.Key> toRemove = new ArrayList<>();
 
@@ -172,27 +281,18 @@ public class InputHandler {
         for (InputConstants.Key key : toRemove) activeRedirects.remove(key);
     }
 
-    // --- LOGIC ---
-
     public static void performAction(IntentProfile.IntentEntry entry, InputConstants.Key physicalKey, int minDuration) {
         KeyMapping targetMapping = KeyMappingHelper.getMapping(entry.actionId());
 
         if (targetMapping != null) {
             Intent.LOGGER.info(">>> ACTIVATING: [{}]", entry.actionId());
 
-            // SPECIAL HANDLING: ATTACK
             if (targetMapping.getName().equals("key.attack")) {
-                // Schedule the attack for 2 ticks later.
-                // This gives the GUI time to close and the mouse to re-lock.
                 taskQueue.add(new DelayedTask(2, () -> {
                     Minecraft mc = Minecraft.getInstance();
                     if (mc instanceof MinecraftAccessor accessor) {
-                        // 1. Force the engine to attack
                         boolean success = accessor.intent$startAttack();
                         Intent.LOGGER.info("Triggered startAttack. Result: {}", success);
-
-                        // 2. VISUAL FEEDBACK: Force the arm to swing immediately.
-                        // Even if startAttack fails (e.g. cooldown), this proves the code ran.
                         if (mc.player != null) {
                             mc.player.swing(InteractionHand.MAIN_HAND);
                         }
@@ -201,7 +301,6 @@ public class InputHandler {
                 return;
             }
 
-            // SPECIAL HANDLING: USE ITEM
             if (targetMapping.getName().equals("key.use")) {
                 taskQueue.add(new DelayedTask(2, () -> {
                     Minecraft mc = Minecraft.getInstance();
@@ -212,7 +311,6 @@ public class InputHandler {
                 return;
             }
 
-            // DEFAULT HANDLING (Jump, Mine, etc.)
             activeRedirects.put(physicalKey, new RedirectState(targetMapping, minDuration));
             targetMapping.setDown(true);
         }

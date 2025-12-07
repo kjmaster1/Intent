@@ -20,8 +20,16 @@ public class KeyInit {
             "key.categories.intent"
     ));
 
+    public static final Lazy<KeyMapping> TOGGLE_DEBUG = Lazy.of(() -> new KeyMapping(
+            "key.intent.debug",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_F8,
+            "key.categories.intent"
+    ));
+
     @SubscribeEvent
     public static void registerKeys(RegisterKeyMappingsEvent event) {
         event.register(OPEN_EDITOR.get());
+        event.register(TOGGLE_DEBUG.get());
     }
 }
