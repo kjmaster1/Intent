@@ -24,7 +24,7 @@ public class IntentEditorScreen extends Screen {
     private IntentProfile.Binding selectedBinding;
 
     public IntentEditorScreen() {
-        super(Component.literal("Intent Editor"));
+        super(Component.translatable("intent.gui.title.intent_editor_screen"));
     }
 
     @Override
@@ -35,9 +35,9 @@ public class IntentEditorScreen extends Screen {
         this.addRenderableWidget(bindingList);
 
         // 1b. Left Pane Buttons (Add/Remove Key)
-        this.addRenderableWidget(Button.builder(Component.literal("+"), b -> openAddKeyPopup())
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.add_key_symbol"), b -> openAddKeyPopup())
                 .bounds(10, this.height - 75, 70, 20).build());
-        this.addRenderableWidget(Button.builder(Component.literal("-"), b -> removeSelectedKey())
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.remove_key_symbol"), b -> removeSelectedKey())
                 .bounds(85, this.height - 75, 70, 20).build());
 
 
@@ -49,9 +49,9 @@ public class IntentEditorScreen extends Screen {
         this.addRenderableWidget(ruleList);
 
         // 2b. Right Pane Buttons (Add/Remove Rule)
-        this.addRenderableWidget(Button.builder(Component.literal("Add Rule"), b -> openAddRuleScreen())
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.add_rule"), b -> openAddRuleScreen())
                 .bounds(leftStart, this.height - 75, 100, 20).build());
-        this.addRenderableWidget(Button.builder(Component.literal("Remove Rule"), b -> removeSelectedRule())
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.remove_rule"), b -> removeSelectedRule())
                 .bounds(leftStart + 110, this.height - 75, 100, 20).build());
 
 
@@ -59,12 +59,12 @@ public class IntentEditorScreen extends Screen {
 
         // 3. Footer Buttons
         int center = this.width / 2;
-        this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.save"), button -> {
             Intent.DATA_MANAGER.saveToDisk();
             this.onClose();
         }).bounds(center - 105, this.height - 25, 100, 20).build());
 
-        this.addRenderableWidget(Button.builder(Component.literal("Done"), button -> this.onClose())
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.editor.button.done"), button -> this.onClose())
                 .bounds(center + 5, this.height - 25, 100, 20).build());
     }
 
@@ -162,9 +162,9 @@ public class IntentEditorScreen extends Screen {
         graphics.fill(left, top, right, bottom, 0x80000000);
 
         if (selectedBinding == null) {
-            graphics.drawCenteredString(this.font, "Select a Key to Edit", left + (right - left) / 2, top + 50, 0xAAAAAA);
+            graphics.drawCenteredString(this.font, Component.translatable("intent.editor.label.select_key"), left + (right - left) / 2, top + 50, 0xAAAAAA);
         } else {
-            graphics.drawCenteredString(this.font, "Use UP/DOWN to change priority", this.width / 2, bottom + 5, 0xAAAAAA);
+            graphics.drawCenteredString(this.font, Component.translatable("intent.editor.label.priority_hint"), this.width / 2, bottom + 5, 0xAAAAAA);
         }
     }
 
@@ -173,10 +173,10 @@ public class IntentEditorScreen extends Screen {
     // ============================
     private static class AddKeyScreen extends Screen {
         private final Screen parent;
-        private final Component message = Component.literal("Press a Key to Bind...");
+        private final Component message = Component.translatable("intent.editor.label.press_key");
 
         public AddKeyScreen(Screen parent) {
-            super(Component.literal("Add Key"));
+            super(Component.translatable("intent.editor.screen.add_key"));
             this.parent = parent;
         }
 
@@ -336,11 +336,14 @@ public class IntentEditorScreen extends Screen {
             graphics.renderOutline(left, top, width, height - 4, borderColor);
 
             graphics.drawString(font, actionName, left + 5, top + 5, 0xFFFFFF, true);
-            graphics.drawString(font, "When: " + contextName, left + 5, top + 18, 0xAAAAAA, false);
 
-            String prio = "P: " + entry.priority();
-            int prioWidth = font.width(prio);
-            graphics.drawString(font, prio, left + width - prioWidth - 10, top + 12, 0x55FF55, true);
+            // Using parameterized translation for "When: [Context]"
+            graphics.drawString(font, Component.translatable("intent.editor.label.when", contextName), left + 5, top + 18, 0xAAAAAA, false);
+
+            // Using parameterized translation for "P: [Priority]"
+            Component prioComp = Component.translatable("intent.editor.label.priority_short", entry.priority());
+            int prioWidth = font.width(prioComp);
+            graphics.drawString(font, prioComp, left + width - prioWidth - 10, top + 12, 0x55FF55, true);
         }
 
         public void changePriority(int amount) {

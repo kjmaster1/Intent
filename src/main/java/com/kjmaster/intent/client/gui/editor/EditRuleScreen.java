@@ -38,7 +38,7 @@ public class EditRuleScreen extends Screen {
     private IIntentContext.ContextType<?> selectedType;
 
     public EditRuleScreen(Screen parent, IntentProfile.IntentEntry existing, Consumer<IntentProfile.IntentEntry> onComplete) {
-        super(Component.literal("Edit Rule"));
+        super(Component.translatable("intent.gui.label.edit_rule"));
         this.parent = parent;
         this.existingEntry = existing;
         this.onComplete = onComplete;
@@ -56,10 +56,10 @@ public class EditRuleScreen extends Screen {
         int startY = 40;
 
         // 1. Action ID
-        this.addRenderableWidget(Button.builder(Component.literal("Action ID (e.g. key.attack)"), b -> {
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.gui.label.action_id.button"), b -> {
                 })
                 .bounds(centerX - 100, startY - 12, 200, 10).build()).active = false;
-        this.actionBox = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.literal("Action ID"));
+        this.actionBox = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.translatable("intent.gui.label.action_id"));
         this.actionBox.setMaxLength(256);
         if (existingEntry != null) this.actionBox.setValue(existingEntry.actionId());
         this.addRenderableWidget(actionBox);
@@ -67,10 +67,10 @@ public class EditRuleScreen extends Screen {
         startY += 35;
 
         // 2. Priority
-        this.addRenderableWidget(Button.builder(Component.literal("Priority (Higher = First)"), b -> {
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.gui.label.priority.button"), b -> {
                 })
                 .bounds(centerX - 100, startY - 12, 200, 10).build()).active = false;
-        this.priorityBox = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.literal("Priority"));
+        this.priorityBox = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.translatable("intent.gui.label.priority"));
         this.priorityBox.setValue(existingEntry != null ? String.valueOf(existingEntry.priority()) : "10");
         this.addRenderableWidget(priorityBox);
 
@@ -87,7 +87,7 @@ public class EditRuleScreen extends Screen {
         CycleButton<IIntentContext.ContextType<?>> contextTypeBtn = builder
                 .withValues((Collection<IIntentContext.ContextType<?>>) types)
                 .withInitialValue(selectedType)
-                .create(centerX - 100, startY, 200, 20, Component.literal("Context"), (btn, val) -> {
+                .create(centerX - 100, startY, 200, 20, Component.translatable("intent.gui.label.context"), (btn, val) -> {
                     this.selectedType = val;
                     refreshDynamicWidgets();
                 });
@@ -96,10 +96,10 @@ public class EditRuleScreen extends Screen {
         startY += 35;
 
         // 4. Dynamic Widgets (Value, Bools)
-        this.valueBox = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.literal("Value"));
-        this.boolBtn1 = CycleButton.onOffBuilder().create(centerX - 100, startY + 25, 95, 20, Component.literal("Flag 1"), (b, v) -> {
+        this.valueBox = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.translatable("intent.gui.label.value"));
+        this.boolBtn1 = CycleButton.onOffBuilder().create(centerX - 100, startY + 25, 95, 20, Component.translatable("intent.gui.label.flag_1"), (b, v) -> {
         });
-        this.boolBtn2 = CycleButton.onOffBuilder().create(centerX + 5, startY + 25, 95, 20, Component.literal("Flag 2"), (b, v) -> {
+        this.boolBtn2 = CycleButton.onOffBuilder().create(centerX + 5, startY + 25, 95, 20, Component.translatable("intent.gui.label.flag_2"), (b, v) -> {
         });
 
         this.addRenderableWidget(valueBox);
@@ -109,10 +109,10 @@ public class EditRuleScreen extends Screen {
         refreshDynamicWidgets();
 
         // 5. Footer Buttons
-        this.addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> this.onClose())
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.gui.label.cancel"), b -> this.onClose())
                 .bounds(centerX - 105, this.height - 30, 100, 20).build());
 
-        this.addRenderableWidget(Button.builder(Component.literal("Save"), b -> save())
+        this.addRenderableWidget(Button.builder(Component.translatable("intent.gui.label.save"), b -> save())
                 .bounds(centerX + 5, this.height - 30, 100, 20).build());
     }
 
@@ -128,29 +128,29 @@ public class EditRuleScreen extends Screen {
 
         if (selectedType == ContextTypes.HEALTH_THRESHOLD.get() || selectedType == ContextTypes.DURABILITY_THRESHOLD.get()) {
             valueBox.visible = true;
-            valueBox.setHint(Component.literal("Value (e.g. 0.5)"));
+            valueBox.setHint(Component.translatable("intent.editor.rule.hint.value_threshold"));
 
             boolBtn1.visible = true;
-            boolBtn1.setMessage(Component.literal("Is %"));
+            boolBtn1.setMessage(Component.translatable("intent.editor.rule.toggle.is_percentage"));
 
             boolBtn2.visible = true;
-            boolBtn2.setMessage(Component.literal("Invert"));
+            boolBtn2.setMessage(Component.translatable("intent.editor.rule.toggle.invert"));
 
         } else if (selectedType == ContextTypes.GUI_IS_OPEN.get()) {
             valueBox.visible = true;
-            valueBox.setHint(Component.literal("Screen Class (e.g. Inventory)"));
+            valueBox.setHint(Component.translatable("intent.editor.rule.hint.screen_class"));
 
         } else if (selectedType == ContextTypes.HOLDING_ITEM.get()) {
             valueBox.visible = true;
-            valueBox.setHint(Component.literal("Item ID (minecraft:stick)"));
+            valueBox.setHint(Component.translatable("intent.editor.rule.hint.item_id"));
 
         } else if (selectedType == ContextTypes.LOOKING_AT_BLOCK.get()) {
             valueBox.visible = true;
-            valueBox.setHint(Component.literal("Block ID (minecraft:stone)"));
+            valueBox.setHint(Component.translatable("intent.editor.rule.hint.block_id"));
 
         } else if (selectedType == ContextTypes.IN_COMBAT.get()) {
             valueBox.visible = true;
-            valueBox.setHint(Component.literal("Timeout (s). Empty = Default"));
+            valueBox.setHint(Component.translatable("intent.editor.rule.hint.combat_timeout"));
         }
 
         if (existingEntry != null && existingEntry.context().getType() == selectedType) {

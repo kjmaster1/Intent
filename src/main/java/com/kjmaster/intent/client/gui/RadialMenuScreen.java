@@ -27,7 +27,7 @@ public class RadialMenuScreen extends Screen {
     private int selectedIndex = -1;
 
     public RadialMenuScreen(List<IntentProfile.IntentEntry> options, InputConstants.Key triggerKey) {
-        super(Component.literal("Intent Selection"));
+        super(Component.translatable("intent.gui.title.radial_menu_screen"));
         this.options = options;
         this.triggerKey = triggerKey;
 
