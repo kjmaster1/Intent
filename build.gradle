@@ -143,11 +143,23 @@ tasks.withType(ProcessResources).configureEach {
     }
 }
 
+def apiJarTask = tasks.register('apiJar', Jar) {
+    archiveClassifier.set('api')
+    from sourceSets.main.output
+    // Include ONLY the api package
+    include 'com/kjmaster/intent/api/**'
+}
+
+tasks.named('build').configure {
+    dependsOn apiJarTask
+}
+
 // Example configuration to allow publishing using the maven-publish plugin
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
             from components.java
+            artifact apiJarTask
         }
     }
     repositories {
