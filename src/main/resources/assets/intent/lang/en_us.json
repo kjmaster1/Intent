@@ -1,0 +1,13 @@
+{
+  "itemGroup.intent": "Example Mod Tab",
+  "block.intent.example_block": "Example Block",
+  "item.intent.example_item": "Example Item",
+
+  "intent.configuration.title": "Intent Configs",
+  "intent.configuration.section.intent.common.toml": "Intent Configs",
+  "intent.configuration.section.intent.common.toml.title": "Intent Configs",
+  "intent.configuration.items": "Item List",
+  "intent.configuration.logDirtBlock": "Log Dirt Block",
+  "intent.configuration.magicNumberIntroduction": "Magic Number Text",
+  "intent.configuration.magicNumber": "Magic Number"
+}

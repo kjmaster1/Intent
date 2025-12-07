@@ -1,0 +1,19 @@
+{
+  "bindings": [
+    {
+      "trigger": "key.keyboard.r",
+      "stack": [
+        {
+          "action_id": "key.jump",
+          "priority": 10,
+          "context": { "type": "intent:gui_is_open" }
+        },
+        {
+          "action_id": "key.attack",
+          "priority": 10,
+          "context": { "type": "intent:gui_is_open" }
+        }
+      ]
+    }
+  ]
+}
