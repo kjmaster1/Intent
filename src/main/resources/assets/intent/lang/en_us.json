@@ -32,5 +32,20 @@
   "intent.editor.screen.add_key": "Add Key",
   "intent.editor.label.press_key": "Press a Key to Bind...",
   "intent.editor.label.when": "When: %s",
-  "intent.editor.label.priority_short": "P: %s"
+  "intent.editor.label.priority_short": "P: %s",
+
+  "intent.configuration.client": "Intent Configuration",
+  "intent.configuration.debug_mode": "Debug Mode",
+  "intent.configuration.radial_menu_scale": "Radial Menu Scale",
+  "intent.configuration.radial_menu_delay": "Radial Menu Delay",
+  "intent.configuration.in_combat_timeout": "In Combat Context Timeout",
+  "intent.configuration.client.tooltip": "Intent Configuration",
+  "intent.configuration.debug_mode.tooltip": "If true, the Intent Debug Overlay will be visible.",
+  "intent.configuration.in_combat_timeout.tooltip": "Default time in seconds to remain in 'Combat Mode' after taking or dealing damage.\nThis is used if a profile does not specify a specific timeout.",
+  "intent.configuration.radial_menu_scale.tooltip": "Scale multiplier for the Radial Menu size.",
+  "intent.configuration.section.intent.client.toml": "Intent Configuration",
+  "intent.configuration.client.button": "Edit",
+  "intent.configuration.radial_menu_delay.tooltip": "The time in ticks (1/20th second) to hold a key before the Radial Menu opens.\nIf 0, the menu opens instantly.\nIf > 0, releasing the key before this time will trigger the highest priority action (Tap behavior).",
+  "intent.configuration.section.intent.client.toml.title": "Intent Configuration",
+  "intent.configuration.title": "Intent Configuration"
 }
