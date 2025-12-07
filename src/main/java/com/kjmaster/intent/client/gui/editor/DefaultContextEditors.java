@@ -263,23 +263,29 @@ public class DefaultContextEditors {
     // ==========================================
     public static class GuiIsOpenEditor implements IContextEditor<GuiIsOpenContext> {
         private EditBox classBox;
+        private CycleButton<Boolean> strictBtn;
 
         @Override
         public void init(Screen screen, int x, int y, int width, Consumer<AbstractWidget> widgetConsumer) {
             this.classBox = new EditBox(Minecraft.getInstance().font, x, y, width, 20, Component.translatable("intent.gui.label.class"));
             this.classBox.setHint(Component.translatable("intent.editor.rule.hint.screen_class"));
+
+            this.strictBtn = CycleButton.onOffBuilder(false).create(x, y + 25, width, 20,
+                    Component.translatable("intent.gui.label.strict"), (b, v) -> {});
+
             widgetConsumer.accept(classBox);
         }
 
         @Override
         public GuiIsOpenContext buildContext() {
             String val = classBox.getValue();
-            return new GuiIsOpenContext(val.isEmpty() ? Optional.empty() : Optional.of(val));
+            return new GuiIsOpenContext(val.isEmpty() ? Optional.empty() : Optional.of(val), strictBtn.getValue());
         }
 
         @Override
         public void populate(GuiIsOpenContext context) {
             context.screenClass().ifPresent(classBox::setValue);
+            strictBtn.setValue(context.strict());
         }
     }
 

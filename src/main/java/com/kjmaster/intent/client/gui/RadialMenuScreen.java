@@ -45,14 +45,14 @@ public class RadialMenuScreen extends Screen {
     public void tick() {
         // 1. Keep the player sneaking/sprinting while the menu is open
         if (minecraft != null && minecraft.player != null) {
-            minecraft.player.input.shiftKeyDown = wasSneaking;
+            minecraft.player.setShiftKeyDown(wasSneaking);
             minecraft.player.setSprinting(wasSprinting);
         }
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // FIX: Render a slight dark overlay to ensure text readability in bright environments.
+        // Render a slight dark overlay to ensure text readability in bright environments.
         // 0x50000000 = ~30% Opacity Black
         graphics.fillGradient(0, 0, this.width, this.height, 0x50000000, 0x50000000);
 

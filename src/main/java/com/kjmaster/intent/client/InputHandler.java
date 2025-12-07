@@ -6,7 +6,6 @@ import com.kjmaster.intent.client.gui.RadialMenuScreen;
 import com.kjmaster.intent.client.gui.editor.IntentEditorScreen;
 import com.kjmaster.intent.data.IntentProfile;
 import com.kjmaster.intent.mixin.KeyMappingAccessor;
-import com.kjmaster.intent.mixin.MinecraftAccessor;
 import com.kjmaster.intent.util.KeyMappingHelper;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
@@ -14,13 +13,13 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.InteractionHand;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -57,12 +56,22 @@ public class InputHandler {
     // "Hold to Open" State
     private static final Map<InputConstants.Key, Integer> holdingKeys = new HashMap<>();
 
+    // Recursion Guard
+    private static final Set<String> processingActions = new HashSet<>();
 
     // --- EVENTS ---
 
     @SubscribeEvent
     public static void onLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
         resetAllState();
+    }
+
+    // Clear state when a non-Intent screen opens (e.g. Inventory, Chat, Pause)
+    @SubscribeEvent
+    public static void onScreenOpening(ScreenEvent.Opening event) {
+        if (!(event.getNewScreen() instanceof RadialMenuScreen) && !(event.getNewScreen() instanceof IntentEditorScreen)) {
+            resetAllState();
+        }
     }
 
     private static void resetAllState() {
@@ -79,6 +88,7 @@ public class InputHandler {
             activeRedirects.clear();
         }
         holdingKeys.clear();
+        processingActions.clear();
     }
 
     /**
@@ -255,17 +265,25 @@ public class InputHandler {
             return;
         }
 
-        // NEW: Check Holding Keys
+        // Focus Loss Check: If we lose window focus, release everything immediately.
+        if (!mc.isWindowActive()) {
+            resetAllState();
+            return;
+        }
+
+        // Check Holding Keys
         if (!holdingKeys.isEmpty()) {
-            Iterator<Map.Entry<InputConstants.Key, Integer>> it = holdingKeys.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<InputConstants.Key, Integer> entry = it.next();
-                int ticksLeft = entry.getValue() - 1;
+            // Safe Iteration: Create a copy of the keys to avoid ConcurrentModificationException
+            // if resetAllState() is triggered (e.g. by setScreen) while iterating.
+            List<InputConstants.Key> keys = new ArrayList<>(holdingKeys.keySet());
+            for (InputConstants.Key key : keys) {
+                if (!holdingKeys.containsKey(key)) continue; // Was removed by something else
+
+                int ticksLeft = holdingKeys.get(key) - 1;
 
                 if (ticksLeft <= 0) {
                     // Time is up! Open the menu.
-                    InputConstants.Key key = entry.getKey();
-                    it.remove(); // Remove from holding so Release doesn't trigger Tap
+                    holdingKeys.remove(key); // Remove from holding so Release doesn't trigger Tap
 
                     List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(key);
                     for (IntentProfile.Binding binding : bindings) {
@@ -279,7 +297,7 @@ public class InputHandler {
                         }
                     }
                 } else {
-                    entry.setValue(ticksLeft);
+                    holdingKeys.put(key, ticksLeft);
                 }
             }
         }
@@ -328,53 +346,48 @@ public class InputHandler {
     }
 
     public static void performAction(IntentProfile.IntentEntry entry, InputConstants.Key physicalKey, int minDuration) {
-        KeyMapping targetMapping = KeyMappingHelper.getMapping(entry.actionId());
+        // [Fix 1.2] Guard against recursion (Key A -> Key B -> Key A)
+        if (processingActions.contains(entry.actionId())) return;
+        processingActions.add(entry.actionId());
 
-        if (targetMapping != null) {
-            Intent.LOGGER.info(">>> ACTIVATING: [{}]", entry.actionId());
+        try {
+            KeyMapping targetMapping = KeyMappingHelper.getMapping(entry.actionId());
 
-            long window = Minecraft.getInstance().getWindow().getWindow();
-            boolean isPhysicalDown;
+            if (targetMapping != null) {
+                Intent.LOGGER.info(">>> ACTIVATING: [{}]", entry.actionId());
 
-            // Correctly check if the physical key is currently held (Handles both Keyboard and Mouse)
-            if (physicalKey.getType() == InputConstants.Type.MOUSE) {
-                isPhysicalDown = GLFW.glfwGetMouseButton(window, physicalKey.getValue()) == GLFW.GLFW_PRESS;
-            } else {
-                isPhysicalDown = InputConstants.isKeyDown(window, physicalKey.getValue());
-            }
+                long window = Minecraft.getInstance().getWindow().getWindow();
+                boolean isPhysicalDown;
 
-            // Check if this is a "Continuous" action like Attack or Use
-            boolean isContinuousAction = targetMapping.getName().equals("key.attack") || targetMapping.getName().equals("key.use");
-
-            // HYBRID LOGIC:
-            // 1. If the key is NOT held (e.g. Radial Menu release), force the One-Shot task.
-            if (isContinuousAction && !isPhysicalDown) {
-                taskQueue.add(new DelayedTask(2, () -> {
-                    Minecraft mc = Minecraft.getInstance();
-                    if (mc instanceof MinecraftAccessor accessor) {
-                        if (targetMapping.getName().equals("key.attack")) {
-                            accessor.intent$startAttack();
-                            if (mc.player != null) {
-                                mc.player.swing(InteractionHand.MAIN_HAND);
-                            }
-                        } else {
-                            accessor.intent$startUseItem();
-                        }
-                    }
-                }));
-                return;
-            }
-
-            if (!targetMapping.isDown()) {
-                if (targetMapping instanceof KeyMappingAccessor accessor) {
-                    accessor.intent$setClickCount(accessor.intent$getClickCount() + 1);
+                // Correctly check if the physical key is currently held (Handles both Keyboard and Mouse)
+                if (physicalKey.getType() == InputConstants.Type.MOUSE) {
+                    isPhysicalDown = GLFW.glfwGetMouseButton(window, physicalKey.getValue()) == GLFW.GLFW_PRESS;
+                } else {
+                    isPhysicalDown = InputConstants.isKeyDown(window, physicalKey.getValue());
                 }
-            }
 
-            // 2. If the key IS held (Direct Binding), or it's a normal key, use the Redirect system.
-            // This allows Mining/Eating to persist as long as the user holds the button.
-            activeRedirects.put(physicalKey, new RedirectState(targetMapping, minDuration));
-            targetMapping.setDown(true);
+                // Check if this is a "Continuous" action like Attack or Use
+                boolean isContinuousAction = targetMapping.getName().equals("key.attack") || targetMapping.getName().equals("key.use");
+
+                // Instead of a one-shot task, ensure continuous actions like attacking/eating
+                // persist for at least 5 ticks if the physical key isn't held (Tap Action).
+                if (isContinuousAction && !isPhysicalDown && minDuration < 5) {
+                    minDuration = 5;
+                }
+
+                if (!targetMapping.isDown()) {
+                    if (targetMapping instanceof KeyMappingAccessor accessor) {
+                        accessor.intent$setClickCount(accessor.intent$getClickCount() + 1);
+                    }
+                }
+
+                // Use the Redirect system for everything.
+                // This allows Mining/Eating to persist as long as the user holds the button (or minDuration passes).
+                activeRedirects.put(physicalKey, new RedirectState(targetMapping, minDuration));
+                targetMapping.setDown(true);
+            }
+        } finally {
+            processingActions.remove(entry.actionId());
         }
     }
 

@@ -103,6 +103,7 @@ public class EditRuleScreen extends Screen {
         // -------------------------------------------------------------------------
         List<? extends IIntentContext.ContextType<?>> types = IntentRegistries.CONTEXT_TYPES.getEntries().stream()
                 .map(holder -> (IIntentContext.ContextType<?>) holder.get())
+                .filter(type -> type != ContextTypes.COMPOSITE.get())
                 .toList();
 
         CycleButton.Builder<IIntentContext.ContextType<?>> builder = CycleButton.builder(this::formatContextName);

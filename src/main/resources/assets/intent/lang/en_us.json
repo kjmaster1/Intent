@@ -65,5 +65,6 @@
   "intent.gui.label.operator": "Operator",
   "intent.gui.editor.composite.warning": "Child conditions must be edited in JSON.",
   "intent.gui.hint.item.tag": "Item Tag (e.g. minecraft:logs)",
-  "intent.gui.label.unknown": "Unknown"
+  "intent.gui.label.unknown": "Unknown",
+  "intent.gui.label.strict": "Strict Matching"
 }

@@ -13,13 +13,14 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.Optional;
 
-public record GuiIsOpenContext(Optional<String> screenClass) implements IIntentContext {
+public record GuiIsOpenContext(Optional<String> screenClass, boolean strict) implements IIntentContext {
 
     public static final MapCodec<GuiIsOpenContext> CODEC = RecordCodecBuilder.mapCodec(instance ->
             instance.group(
                     Codec.STRING.optionalFieldOf("screen_class", null)
                             .xmap(Optional::ofNullable, opt -> opt.orElse(null))
-                            .forGetter(GuiIsOpenContext::screenClass)
+                            .forGetter(GuiIsOpenContext::screenClass),
+                    Codec.BOOL.optionalFieldOf("strict", false).forGetter(GuiIsOpenContext::strict)
             ).apply(instance, GuiIsOpenContext::new)
     );
 
@@ -40,26 +41,33 @@ public record GuiIsOpenContext(Optional<String> screenClass) implements IIntentC
         String target = screenClass.get();
 
         // 1. Stable Check: MenuType Registry Name
-        // This solves Obfuscation issues for 90% of gameplay screens (Inventory, Chests, Furnaces).
         if (currentScreen instanceof AbstractContainerScreen<?> containerScreen) {
             ResourceLocation key = BuiltInRegistries.MENU.getKey(containerScreen.getMenu().getType());
-            // Check if the user's string matches/contains the registry key (e.g. "inventory" matches "minecraft:inventory")
-            if (key != null && key.toString().contains(target)) {
-                return true;
+            if (key != null) {
+                // Handle Strict vs Loose matching
+                if (strict) {
+                    if (key.toString().equals(target)) return true;
+                } else {
+                    if (key.toString().contains(target)) return true;
+                }
             }
         }
 
         // 2. Fallback: Full Class Name
-        // Required for screens without Menus (Title Screen, Chat, etc.) if the user knows the full class name.
         String currentName = currentScreen.getClass().getName();
-        if (currentName.contains(target)) {
-            return true;
+        if (strict) {
+            if (currentName.equals(target)) return true;
+        } else {
+            if (currentName.contains(target)) return true;
         }
 
         // 3. Fallback: Simple Class Name
-        // This helps if packages are obfuscated but the class name is preserved.
         String simpleName = currentScreen.getClass().getSimpleName();
-        return simpleName.contains(target);
+        if (strict) {
+            return simpleName.equals(target);
+        } else {
+            return simpleName.contains(target);
+        }
     }
 
     @Override
