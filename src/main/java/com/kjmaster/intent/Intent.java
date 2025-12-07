@@ -1,6 +1,8 @@
 package com.kjmaster.intent;
 
 import com.kjmaster.intent.client.gui.IntentDebugOverlay;
+import com.kjmaster.intent.client.gui.IntentOverlay;
+import com.kjmaster.intent.client.gui.editor.DefaultContextEditors;
 import com.kjmaster.intent.data.IntentDataManager;
 import com.kjmaster.intent.impl.ContextTypes;
 import com.kjmaster.intent.registry.IntentRegistries;
@@ -11,6 +13,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
@@ -35,6 +38,7 @@ public class Intent {
 
         modEventBus.addListener(this::onRegisterReloadListeners);
         modEventBus.addListener(this::registerOverlays);
+        modEventBus.addListener(this::clientSetup);
     }
 
     private void onRegisterReloadListeners(RegisterClientReloadListenersEvent event) {
@@ -46,6 +50,16 @@ public class Intent {
                 ResourceLocation.fromNamespaceAndPath(Intent.MODID, "debug_hud"),
                 IntentDebugOverlay::render
         );
+
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(Intent.MODID, "status_hud"),
+                new IntentOverlay()
+        );
+    }
+
+    private void clientSetup(FMLClientSetupEvent event) {
+        // Register Editors here, when Registries are ready
+        event.enqueueWork(DefaultContextEditors::registerAll);
     }
 
 }

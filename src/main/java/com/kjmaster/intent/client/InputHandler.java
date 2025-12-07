@@ -5,6 +5,7 @@ import com.kjmaster.intent.Intent;
 import com.kjmaster.intent.client.gui.RadialMenuScreen;
 import com.kjmaster.intent.client.gui.editor.IntentEditorScreen;
 import com.kjmaster.intent.data.IntentProfile;
+import com.kjmaster.intent.mixin.KeyMappingAccessor;
 import com.kjmaster.intent.mixin.MinecraftAccessor;
 import com.kjmaster.intent.util.KeyMappingHelper;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -82,6 +83,7 @@ public class InputHandler {
 
     /**
      * Called via Mixin from KeyboardHandler.
+     *
      * @return true if the key was handled by Intent and vanilla processing should be cancelled.
      */
     public static boolean handleKeyInput(int keyCode, int scanCode, int action, int modifiers) {
@@ -337,6 +339,12 @@ public class InputHandler {
                     }
                 }));
                 return;
+            }
+
+            if (!targetMapping.isDown()) {
+                if (targetMapping instanceof KeyMappingAccessor accessor) {
+                    accessor.intent$setClickCount(accessor.intent$getClickCount() + 1);
+                }
             }
 
             // 2. If the key IS held (Direct Binding), or it's a normal key, use the Redirect system.

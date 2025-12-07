@@ -6,6 +6,7 @@ import net.minecraft.client.player.LocalPlayer;
 public interface IIntentContext {
     /**
      * Checks if this context condition is currently met.
+     *
      * @param player The client player instance.
      * @return true if the condition is active.
      */

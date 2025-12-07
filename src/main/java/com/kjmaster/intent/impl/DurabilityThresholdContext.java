@@ -7,7 +7,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.item.ItemStack;
 
-public record DurabilityThresholdContext(float threshold, boolean isPercentage, boolean invert) implements IIntentContext {
+public record DurabilityThresholdContext(float threshold, boolean isPercentage,
+                                         boolean invert) implements IIntentContext {
 
     public static final MapCodec<DurabilityThresholdContext> CODEC = RecordCodecBuilder.mapCodec(instance ->
             instance.group(

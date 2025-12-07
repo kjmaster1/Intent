@@ -15,7 +15,8 @@ import net.minecraft.world.phys.HitResult;
 
 import java.util.Optional;
 
-public record LookingAtEntityContext(Optional<EntityType<?>> entityType, Optional<TagKey<EntityType<?>>> tag) implements IIntentContext {
+public record LookingAtEntityContext(Optional<EntityType<?>> entityType,
+                                     Optional<TagKey<EntityType<?>>> tag) implements IIntentContext {
 
     public static final MapCodec<LookingAtEntityContext> CODEC = RecordCodecBuilder.mapCodec(instance ->
             instance.group(
