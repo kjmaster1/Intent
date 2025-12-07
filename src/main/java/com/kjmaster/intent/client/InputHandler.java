@@ -10,6 +10,8 @@ import com.kjmaster.intent.util.KeyMappingHelper;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import net.neoforged.api.distmarker.Dist;
@@ -106,6 +108,12 @@ public class InputHandler {
         // PRESS EVENT
         if (event.getAction() == GLFW.GLFW_PRESS) {
 
+            // Allow Intent keys in GUIs (Inventory, etc.), BUT block them if typing in Chat or an EditBox.
+            if (mc.screen != null && !(mc.screen instanceof RadialMenuScreen)) {
+                if (mc.screen instanceof ChatScreen) return;
+                if (mc.screen.getFocused() instanceof EditBox) return;
+            }
+
             if (KeyInit.OPEN_EDITOR.get().matches(event.getKey(), event.getScanCode())) {
                 mc.setScreen(new IntentEditorScreen());
                 return;
@@ -174,7 +182,6 @@ public class InputHandler {
         if (event.getAction() == GLFW.GLFW_PRESS) {
 
             // Safety: If this mouse button isn't bound in Intent, let Vanilla handle it.
-            // This prevents us from breaking standard left/right clicks unless configured.
             List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(mouseKey);
             if (bindings.isEmpty()) return;
 
@@ -207,11 +214,6 @@ public class InputHandler {
         Minecraft mc = Minecraft.getInstance();
 
         if (mc.player == null) {
-            resetAllState();
-            return;
-        }
-
-        if (mc.screen != null && !(mc.screen instanceof RadialMenuScreen)) {
             resetAllState();
             return;
         }
@@ -271,7 +273,14 @@ public class InputHandler {
             if (state.ticksLeft > 0) {
                 state.ticksLeft--;
             } else {
-                boolean isPhysicalDown = InputConstants.isKeyDown(window, physicalKey.getValue());
+                // Correctly check mouse buttons vs keyboard keys
+                boolean isPhysicalDown;
+                if (physicalKey.getType() == InputConstants.Type.MOUSE) {
+                    isPhysicalDown = GLFW.glfwGetMouseButton(window, physicalKey.getValue()) == GLFW.GLFW_PRESS;
+                } else {
+                    isPhysicalDown = InputConstants.isKeyDown(window, physicalKey.getValue());
+                }
+
                 if (!isPhysicalDown) {
                     state.target.setDown(false);
                     toRemove.add(physicalKey);
@@ -287,30 +296,40 @@ public class InputHandler {
         if (targetMapping != null) {
             Intent.LOGGER.info(">>> ACTIVATING: [{}]", entry.actionId());
 
-            if (targetMapping.getName().equals("key.attack")) {
+            long window = Minecraft.getInstance().getWindow().getWindow();
+            boolean isPhysicalDown;
+
+            // Correctly check if the physical key is currently held (Handles both Keyboard and Mouse)
+            if (physicalKey.getType() == InputConstants.Type.MOUSE) {
+                isPhysicalDown = GLFW.glfwGetMouseButton(window, physicalKey.getValue()) == GLFW.GLFW_PRESS;
+            } else {
+                isPhysicalDown = InputConstants.isKeyDown(window, physicalKey.getValue());
+            }
+
+            // Check if this is a "Continuous" action like Attack or Use
+            boolean isContinuousAction = targetMapping.getName().equals("key.attack") || targetMapping.getName().equals("key.use");
+
+            // HYBRID LOGIC:
+            // 1. If the key is NOT held (e.g. Radial Menu release), force the One-Shot task.
+            if (isContinuousAction && !isPhysicalDown) {
                 taskQueue.add(new DelayedTask(2, () -> {
                     Minecraft mc = Minecraft.getInstance();
                     if (mc instanceof MinecraftAccessor accessor) {
-                        boolean success = accessor.intent$startAttack();
-                        Intent.LOGGER.info("Triggered startAttack. Result: {}", success);
-                        if (mc.player != null) {
-                            mc.player.swing(InteractionHand.MAIN_HAND);
+                        if (targetMapping.getName().equals("key.attack")) {
+                            accessor.intent$startAttack();
+                            if (mc.player != null) {
+                                mc.player.swing(InteractionHand.MAIN_HAND);
+                            }
+                        } else {
+                            accessor.intent$startUseItem();
                         }
                     }
                 }));
                 return;
             }
 
-            if (targetMapping.getName().equals("key.use")) {
-                taskQueue.add(new DelayedTask(2, () -> {
-                    Minecraft mc = Minecraft.getInstance();
-                    if (mc instanceof MinecraftAccessor accessor) {
-                        accessor.intent$startUseItem();
-                    }
-                }));
-                return;
-            }
-
+            // 2. If the key IS held (Direct Binding), or it's a normal key, use the Redirect system.
+            // This allows Mining/Eating to persist as long as the user holds the button.
             activeRedirects.put(physicalKey, new RedirectState(targetMapping, minDuration));
             targetMapping.setDown(true);
         }
