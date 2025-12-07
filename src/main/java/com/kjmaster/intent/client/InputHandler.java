@@ -93,6 +93,18 @@ public class InputHandler {
 
         // RELEASE EVENT
         if (action == GLFW.GLFW_RELEASE) {
+
+            // Immediately release redirects to prevent "stickiness" or race conditions
+            if (activeRedirects.containsKey(physicalKey)) {
+                RedirectState state = activeRedirects.get(physicalKey);
+                // Only interrupt if the minimum duration has passed
+                if (state.ticksLeft <= 0) {
+                    activeRedirects.remove(physicalKey);
+                    state.target.setDown(false);
+                    return true; // Consume event
+                }
+            }
+
             // If we were holding this key waiting for a menu, but released early -> TAP ACTION
             if (holdingKeys.containsKey(physicalKey)) {
                 holdingKeys.remove(physicalKey);
@@ -171,6 +183,18 @@ public class InputHandler {
 
         // RELEASE EVENT
         if (event.getAction() == GLFW.GLFW_RELEASE) {
+
+            // Immediately release redirects for Mouse Inputs too
+            if (activeRedirects.containsKey(mouseKey)) {
+                RedirectState state = activeRedirects.get(mouseKey);
+                if (state.ticksLeft <= 0) {
+                    activeRedirects.remove(mouseKey);
+                    state.target.setDown(false);
+                    event.setCanceled(true); // Swallow mouse up if we swallowed mouse down
+                    return;
+                }
+            }
+
             // TAP BEHAVIOR: If we were holding this button waiting for a menu, but released early
             if (holdingKeys.containsKey(mouseKey)) {
                 holdingKeys.remove(mouseKey);

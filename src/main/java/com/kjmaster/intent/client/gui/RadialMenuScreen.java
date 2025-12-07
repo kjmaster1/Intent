@@ -52,7 +52,9 @@ public class RadialMenuScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Do NOT render background (darkening)
+        // FIX: Render a slight dark overlay to ensure text readability in bright environments.
+        // 0x50000000 = ~30% Opacity Black
+        graphics.fillGradient(0, 0, this.width, this.height, 0x50000000, 0x50000000);
 
         int centerX = this.width / 2;
         int centerY = this.height / 2;

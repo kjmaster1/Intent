@@ -24,14 +24,18 @@ public record InCombatContext(Optional<Integer> timeoutOverride) implements IInt
 
         // Convert seconds to ticks
         int threshold = timeoutSeconds * 20;
+
+        // 1. Hurt by Mobs (Specific Aggressor)
         int lastHurtBy = player.tickCount - player.getLastHurtByMobTimestamp();
+
+        // 2. Attacking Mobs (Active Aggression)
         int lastAttacked = player.tickCount - player.getLastHurtMobTimestamp();
 
-        // Check if either even happened recently
-        boolean wasHurtRecently = lastHurtBy < threshold;
+        boolean wasHurtByMob = lastHurtBy < threshold;
         boolean attackedRecently = lastAttacked < threshold;
 
-        return wasHurtRecently || attackedRecently;
+        // Return TRUE if any of these conditions are met
+        return wasHurtByMob || attackedRecently;
     }
 
     @Override

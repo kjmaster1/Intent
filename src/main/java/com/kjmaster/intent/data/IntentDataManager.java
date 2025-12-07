@@ -24,7 +24,13 @@ public class IntentDataManager extends SimpleJsonResourceReloadListener {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
-    private final Map<ResourceLocation, IntentProfile> rawProfiles = new HashMap<>();
+    // Holds purely default profiles loaded from assets.
+    private final Map<ResourceLocation, IntentProfile> defaultProfiles = new HashMap<>();
+
+    // Holds ONLY the user's custom changes loaded from user_profile.json.
+    private IntentProfile userProfile = new IntentProfile(new ArrayList<>());
+
+    // The calculated active profile used by the game (Defaults + User Overrides).
     private IntentProfile masterProfile = new IntentProfile(new ArrayList<>());
 
     private final Map<InputConstants.Key, List<IntentProfile.Binding>> keyCache = new HashMap<>();
@@ -35,15 +41,18 @@ public class IntentDataManager extends SimpleJsonResourceReloadListener {
 
     @Override
     protected void apply(Map<ResourceLocation, JsonElement> object, @NotNull ResourceManager resourceManager, @NotNull ProfilerFiller profiler) {
-        rawProfiles.clear();
+        defaultProfiles.clear();
         LOGGER.info("Loading Intent Profiles...");
 
         // 1. Load Defaults from Assets
         object.forEach((location, json) -> {
             try {
+                // Safety check: ignore if user_config somehow appears in data packs
+                if (location.getPath().endsWith("user_config")) return;
+
                 IntentProfile.CODEC.parse(JsonOps.INSTANCE, json)
                         .resultOrPartial(error -> LOGGER.error("Failed to parse profile {}: {}", location, error))
-                        .ifPresent(profile -> rawProfiles.put(location, profile));
+                        .ifPresent(profile -> defaultProfiles.put(location, profile));
             } catch (Exception e) {
                 LOGGER.error("Exception loading profile {}", location, e);
             }
@@ -55,7 +64,7 @@ public class IntentDataManager extends SimpleJsonResourceReloadListener {
         // 3. Flatten into Master Profile & Rebuild Cache
         rebuildMasterProfile();
 
-        LOGGER.info("Intent System Ready. Loaded {} profiles merged into {} active bindings.", rawProfiles.size(), masterProfile.bindings().size());
+        LOGGER.info("Intent System Ready. Loaded {} default profiles. Master profile contains {} active bindings.", defaultProfiles.size(), masterProfile.bindings().size());
     }
 
     private void loadUserConfig() {
@@ -68,39 +77,40 @@ public class IntentDataManager extends SimpleJsonResourceReloadListener {
                     JsonElement json = GSON.fromJson(reader, JsonElement.class);
                     IntentProfile.CODEC.parse(JsonOps.INSTANCE, json)
                             .resultOrPartial(error -> LOGGER.error("Failed to parse user config: {}", error))
-                            .ifPresent(profile -> {
-                                ResourceLocation configId = ResourceLocation.fromNamespaceAndPath(Intent.MODID, "user_config");
-                                rawProfiles.put(configId, profile);
-                            });
+                            .ifPresent(profile -> this.userProfile = profile);
                 }
+            } else {
+                // Ensure empty profile if file doesn't exist
+                this.userProfile = new IntentProfile(new ArrayList<>());
             }
         } catch (Exception e) {
             LOGGER.error("Failed to load user config", e);
+            this.userProfile = new IntentProfile(new ArrayList<>());
         }
     }
 
     private void rebuildMasterProfile() {
-        Map<String, List<IntentProfile.IntentEntry>> mergedStacks = new HashMap<>();
+        // We accumulate bindings by Key.
+        Map<String, List<IntentProfile.IntentEntry>> stackedBindings = new HashMap<>();
 
-        for (Map.Entry<ResourceLocation, IntentProfile> entry : rawProfiles.entrySet()) {
-            if (entry.getKey().getPath().equals("user_config")) continue;
-
-            for (IntentProfile.Binding binding : entry.getValue().bindings()) {
-                mergedStacks.computeIfAbsent(binding.triggerKey(), k -> new ArrayList<>())
+        // 1. Accumulate Defaults (Append strategy for multiple mods adding to same key)
+        for (IntentProfile profile : defaultProfiles.values()) {
+            for (IntentProfile.Binding binding : profile.bindings()) {
+                stackedBindings.computeIfAbsent(binding.triggerKey(), k -> new ArrayList<>())
                         .addAll(binding.stack());
             }
         }
 
-        ResourceLocation configId = ResourceLocation.fromNamespaceAndPath(Intent.MODID, "user_config");
-        if (rawProfiles.containsKey(configId)) {
-            for (IntentProfile.Binding binding : rawProfiles.get(configId).bindings()) {
-                mergedStacks.computeIfAbsent(binding.triggerKey(), k -> new ArrayList<>())
-                        .addAll(binding.stack());
-            }
+        // 2. Apply User Overrides
+        // Logic: If the USER defines a key, it completely OVERRIDES the defaults for that key.
+        for (IntentProfile.Binding userBinding : userProfile.bindings()) {
+            // Replace the stack entirely with the user's version
+            stackedBindings.put(userBinding.triggerKey(), new ArrayList<>(userBinding.stack()));
         }
 
+        // 3. Build Final List
         List<IntentProfile.Binding> finalBindings = new ArrayList<>();
-        for (Map.Entry<String, List<IntentProfile.IntentEntry>> entry : mergedStacks.entrySet()) {
+        for (Map.Entry<String, List<IntentProfile.IntentEntry>> entry : stackedBindings.entrySet()) {
             finalBindings.add(new IntentProfile.Binding(entry.getKey(), entry.getValue()));
         }
 
@@ -130,15 +140,17 @@ public class IntentDataManager extends SimpleJsonResourceReloadListener {
             if (!Files.exists(configDir)) Files.createDirectories(configDir);
             Path file = configDir.resolve("user_profile.json");
 
-            JsonElement json = IntentProfile.CODEC.encodeStart(JsonOps.INSTANCE, masterProfile)
+            // Only save the userProfile, NEVER the masterProfile.
+            JsonElement json = IntentProfile.CODEC.encodeStart(JsonOps.INSTANCE, userProfile)
                     .getOrThrow(IllegalStateException::new);
 
             String jsonString = GSON.toJson(json);
             Files.writeString(file, jsonString);
-            LOGGER.info("Saved master profile to {}", file);
+            LOGGER.info("Saved user profile to {}", file);
 
-            loadUserConfig();
-            rebuildMasterProfile();
+            // Reloading is not strictly necessary as memory state is up to date,
+            // but we can reload to ensure consistency if needed.
+            // For now, in-memory state is authority.
 
         } catch (Exception e) {
             LOGGER.error("Failed to save profile", e);
@@ -146,17 +158,29 @@ public class IntentDataManager extends SimpleJsonResourceReloadListener {
     }
 
     public void updateBinding(IntentProfile.Binding newBinding) {
-        List<IntentProfile.Binding> mutable = new ArrayList<>(masterProfile.bindings());
+        // Update the User Profile
+        List<IntentProfile.Binding> mutable = new ArrayList<>(userProfile.bindings());
+
+        // Remove existing user definition for this key (if any)
         mutable.removeIf(b -> b.triggerKey().equals(newBinding.triggerKey()));
+
+        // Add the new definition
         mutable.add(newBinding);
-        this.masterProfile = new IntentProfile(mutable);
-        refreshCache();
+
+        this.userProfile = new IntentProfile(mutable);
+
+        // Rebuild Master to reflect changes in-game immediately
+        rebuildMasterProfile();
     }
 
     public void removeBinding(String triggerKey) {
-        List<IntentProfile.Binding> mutable = new ArrayList<>(masterProfile.bindings());
+        // Remove from User Profile
+        // This effectively "Reverts to Default" if a default exists,
+        // or "Deletes" it if no default exists.
+        List<IntentProfile.Binding> mutable = new ArrayList<>(userProfile.bindings());
         mutable.removeIf(b -> b.triggerKey().equals(triggerKey));
-        this.masterProfile = new IntentProfile(mutable);
-        refreshCache();
+        this.userProfile = new IntentProfile(mutable);
+
+        rebuildMasterProfile();
     }
 }
