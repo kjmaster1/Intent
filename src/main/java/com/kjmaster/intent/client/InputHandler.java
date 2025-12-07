@@ -80,14 +80,17 @@ public class InputHandler {
         holdingKeys.clear();
     }
 
-    @SubscribeEvent
-    public static void onKeyInput(InputEvent.Key event) {
+    /**
+     * Called via Mixin from KeyboardHandler.
+     * @return true if the key was handled by Intent and vanilla processing should be cancelled.
+     */
+    public static boolean handleKeyInput(int keyCode, int scanCode, int action, int modifiers) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
-        InputConstants.Key physicalKey = InputConstants.getKey(event.getKey(), event.getScanCode());
+        if (mc.player == null) return false;
+        InputConstants.Key physicalKey = InputConstants.getKey(keyCode, scanCode);
 
         // RELEASE EVENT
-        if (event.getAction() == GLFW.GLFW_RELEASE) {
+        if (action == GLFW.GLFW_RELEASE) {
             // If we were holding this key waiting for a menu, but released early -> TAP ACTION
             if (holdingKeys.containsKey(physicalKey)) {
                 holdingKeys.remove(physicalKey);
@@ -98,34 +101,34 @@ public class InputHandler {
                     List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
                     if (!matches.isEmpty()) {
                         performAction(matches.getFirst(), physicalKey, 0);
-                        break;
+                        return true; // Cancel vanilla release logic for this key
                     }
                 }
             }
-            return;
+            return false;
         }
 
         // PRESS EVENT
-        if (event.getAction() == GLFW.GLFW_PRESS) {
+        if (action == GLFW.GLFW_PRESS) {
 
             // Allow Intent keys in GUIs (Inventory, etc.), BUT block them if typing in Chat or an EditBox.
             if (mc.screen != null && !(mc.screen instanceof RadialMenuScreen)) {
-                if (mc.screen instanceof ChatScreen) return;
-                if (mc.screen.getFocused() instanceof EditBox) return;
+                if (mc.screen instanceof ChatScreen) return false;
+                if (mc.screen.getFocused() instanceof EditBox) return false;
             }
 
-            if (KeyInit.OPEN_EDITOR.get().matches(event.getKey(), event.getScanCode())) {
+            if (KeyInit.OPEN_EDITOR.get().matches(keyCode, scanCode)) {
                 mc.setScreen(new IntentEditorScreen());
-                return;
+                return true; // Swallow key
             }
 
-            if (KeyInit.TOGGLE_DEBUG.get().matches(event.getKey(), event.getScanCode())) {
+            if (KeyInit.TOGGLE_DEBUG.get().matches(keyCode, scanCode)) {
                 Config.DEBUG_MODE.set(!Config.DEBUG_MODE.get());
-                return;
+                return true; // Swallow key
             }
 
-            if (activeRedirects.containsKey(physicalKey)) return;
-            if (mc.screen instanceof RadialMenuScreen) return;
+            if (activeRedirects.containsKey(physicalKey)) return false;
+            if (mc.screen instanceof RadialMenuScreen) return false;
 
             // Binding Logic
             List<IntentProfile.Binding> bindings = Intent.DATA_MANAGER.getBindings(physicalKey);
@@ -136,7 +139,7 @@ public class InputHandler {
                 // 1. Single Match -> Always Instant
                 if (matches.size() == 1) {
                     performAction(matches.getFirst(), physicalKey, 0);
-                    return;
+                    return true; // BLOCK VANILLA
                 }
 
                 // 2. Multiple Matches -> Radial Menu
@@ -144,14 +147,19 @@ public class InputHandler {
                 if (delay <= 0) {
                     // Instant Open
                     mc.setScreen(new RadialMenuScreen(matches, physicalKey));
+                    return true; // BLOCK VANILLA
                 } else {
                     // Delayed Open (Wait for Tick)
                     holdingKeys.put(physicalKey, delay);
+                    // We also block vanilla here, because we are "holding" it for potential Intent use
+                    return true;
                 }
             }
         }
+        return false;
     }
 
+    // Keep MouseInput as an event, because InputEvent.MouseButton.Pre IS cancelable.
     @SubscribeEvent
     public static void onMouseInput(InputEvent.MouseButton.Pre event) {
         Minecraft mc = Minecraft.getInstance();
@@ -191,6 +199,9 @@ public class InputHandler {
             for (IntentProfile.Binding binding : bindings) {
                 List<IntentProfile.IntentEntry> matches = findMatches(binding.stack(), mc.player);
                 if (matches.isEmpty()) continue;
+
+                // PREVENT the default vanilla action for this key if Intent handled it
+                event.setCanceled(true);
 
                 // 1. Single Match -> Always Instant
                 if (matches.size() == 1) {
